@@ -1,0 +1,24 @@
+{
+  "name": "copy-trade-webhook",
+  "version": "1.0.0",
+  "description": "Auto copy trade bot for Account Abstraction wallets on Base",
+  "main": "copy-trade-alchemy.js",
+  "type": "module",
+  "scripts": {
+    "start": "node copy-trade-alchemy.js",
+    "dev": "nodemon copy-trade-alchemy.js"
+  },
+  "keywords": ["copy-trade", "webhook", "base", "0x", "alchemy"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ethers": "^6.9.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "qs": "^6.11.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
