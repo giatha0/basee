@@ -68,30 +68,31 @@ function verifySignature(body, signature) {
   return `sha256=${hash}` === signature;
 }
 
-// Check if this is a real swap (has both IN and OUT transfers)
+// Check if this is a real swap (EXACTLY 1 IN and 1 OUT - for safety)
 function isRealSwap(allActivity) {
   const transfers = Array.isArray(allActivity) ? allActivity : [];
 
   // CHỈ LẤY TOKEN TRANSFERS (category === "token")
   const tokenTransfers = transfers.filter(t => t.category === "token");
 
-  if (tokenTransfers.length < 2) {
-    return null;
-  }
-
-  // Find token OUT (from target wallet) - CHỈ TRONG TOKEN TRANSFERS
-  const tokenOut = tokenTransfers.find(
+  // Find ALL token OUT (from target wallet)
+  const tokensOut = tokenTransfers.filter(
     t => t.fromAddress?.toLowerCase() === TARGET_WALLET.toLowerCase()
   );
 
-  // Find token IN (to target wallet) - CHỈ TRONG TOKEN TRANSFERS
-  const tokenIn = tokenTransfers.find(
+  // Find ALL token IN (to target wallet)
+  const tokensIn = tokenTransfers.filter(
     t => t.toAddress?.toLowerCase() === TARGET_WALLET.toLowerCase()
   );
 
-  if (!tokenOut || !tokenIn) {
+  // SAFETY: Chỉ chấp nhận ĐÚNG 1 IN và 1 OUT
+  // Nhiều hơn có thể là attack/fake bundle
+  if (tokensOut.length !== 1 || tokensIn.length !== 1) {
     return null;
   }
+
+  const tokenOut = tokensOut[0];
+  const tokenIn = tokensIn[0];
 
   const tokenInAddress = tokenIn.rawContract?.address || tokenIn.tokenAddress;
 
@@ -272,13 +273,14 @@ const webhookHandler = async (req, res) => {
     if (!swapInfo) {
       // DEBUG: Log why it's not a swap
       const tokenTransfers = allActivity.filter(a => a.category === "token");
-      const tokenOut = tokenTransfers.find(t => t.fromAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
-      const tokenIn = tokenTransfers.find(t => t.toAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
+      const tokensOut = tokenTransfers.filter(t => t.fromAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
+      const tokensIn = tokenTransfers.filter(t => t.toAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
 
       console.log(`\n❌ Not a swap`);
-      console.log(`   Token transfers: ${tokenTransfers.length}`);
-      console.log(`   Token OUT: ${tokenOut ? 'YES' : 'NO'}`);
-      console.log(`   Token IN: ${tokenIn ? 'YES' : 'NO'}`);
+      console.log(`   Token OUT: ${tokensOut.length} | Token IN: ${tokensIn.length}`);
+      if (tokensOut.length !== 1 || tokensIn.length !== 1) {
+        console.log(`   Reason: Must be exactly 1 IN and 1 OUT`);
+      }
       console.log(`Target TX: https://basescan.org/tx/${txHash}`);
       return;
     }
