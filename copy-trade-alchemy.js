@@ -270,7 +270,15 @@ const webhookHandler = async (req, res) => {
     const swapInfo = isRealSwap(allActivity);
 
     if (!swapInfo) {
+      // DEBUG: Log why it's not a swap
+      const tokenTransfers = allActivity.filter(a => a.category === "token");
+      const tokenOut = tokenTransfers.find(t => t.fromAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
+      const tokenIn = tokenTransfers.find(t => t.toAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
+
       console.log(`\n❌ Not a swap`);
+      console.log(`   Token transfers: ${tokenTransfers.length}`);
+      console.log(`   Token OUT: ${tokenOut ? 'YES' : 'NO'}`);
+      console.log(`   Token IN: ${tokenIn ? 'YES' : 'NO'}`);
       console.log(`Target TX: https://basescan.org/tx/${txHash}`);
       return;
     }
