@@ -40,8 +40,12 @@ const BLACKLIST_TOKENS = new Set(
   (process.env.BLACKLIST_TOKENS || "").split(",").map(addr => addr.toLowerCase().trim()).filter(Boolean)
 );
 
-// Provider & Wallet
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+// Provider & Wallet (với timeout cao hơn)
+const provider = new ethers.JsonRpcProvider(process.env.RPC_URL, undefined, {
+  staticNetwork: true,
+  pollingInterval: 1000,
+});
+provider._getConnection().timeout = 30000; // 30 second timeout
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
 // Alchemy webhook signing key (optional)
@@ -241,40 +245,48 @@ const webhookHandler = async (req, res) => {
     const tokenTransfersCount = allActivity.filter(a => a.category === "token").length;
 
     if (tokenTransfersCount < 2) {
-      // Lấy receipt để tìm token transfers
-      const receipt = await provider.getTransactionReceipt(txHash);
-
-      if (!receipt) {
-        return;
-      }
-
-      // Parse Transfer events (ERC20)
-      const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-      const tokenTransfers = [];
-
-      for (const log of receipt.logs) {
-        if (log.topics[0] === TRANSFER_TOPIC && log.topics.length >= 3) {
-          const from = "0x" + log.topics[1].slice(26);
-          const to = "0x" + log.topics[2].slice(26);
-          const tokenAddress = log.address;
-
-          tokenTransfers.push({
-            from,
-            to,
-            tokenAddress,
-            fromAddress: from,
-            toAddress: to,
-            category: "token",
-            rawContract: {
-              address: tokenAddress
-            }
-          });
+      // Lấy receipt để tìm token transfers (1 retry nếu fail)
+      let receipt = null;
+      try {
+        receipt = await provider.getTransactionReceipt(txHash);
+      } catch (err) {
+        // Retry 1 lần sau 500ms
+        await new Promise(r => setTimeout(r, 500));
+        try {
+          receipt = await provider.getTransactionReceipt(txHash);
+        } catch (e) {
+          // Bỏ qua, tiếp tục với data từ webhook
         }
       }
 
-      if (tokenTransfers.length > 0) {
-        // Thêm token transfers vào allActivity
-        allActivity.push(...tokenTransfers);
+      if (receipt) {
+        // Parse Transfer events (ERC20)
+        const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+        const tokenTransfers = [];
+
+        for (const log of receipt.logs) {
+          if (log.topics[0] === TRANSFER_TOPIC && log.topics.length >= 3) {
+            const from = "0x" + log.topics[1].slice(26);
+            const to = "0x" + log.topics[2].slice(26);
+            const tokenAddress = log.address;
+
+            tokenTransfers.push({
+              from,
+              to,
+              tokenAddress,
+              fromAddress: from,
+              toAddress: to,
+              category: "token",
+              rawContract: {
+                address: tokenAddress
+              }
+            });
+          }
+        }
+
+        if (tokenTransfers.length > 0) {
+          allActivity.push(...tokenTransfers);
+        }
       }
     }
 
