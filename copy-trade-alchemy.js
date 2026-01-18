@@ -247,15 +247,19 @@ const webhookHandler = async (req, res) => {
     if (tokenTransfersCount < 2) {
       // Lấy receipt để tìm token transfers (1 retry nếu fail)
       let receipt = null;
+      let retryCount = 0;
       try {
         receipt = await provider.getTransactionReceipt(txHash);
       } catch (err) {
         // Retry 1 lần sau 500ms
+        retryCount = 1;
+        console.log(`   ⏳ RPC failed, retrying...`);
         await new Promise(r => setTimeout(r, 500));
         try {
           receipt = await provider.getTransactionReceipt(txHash);
+          console.log(`   ✅ Retry successful`);
         } catch (e) {
-          // Bỏ qua, tiếp tục với data từ webhook
+          console.log(`   ❌ Retry failed, using webhook data`);
         }
       }
 
