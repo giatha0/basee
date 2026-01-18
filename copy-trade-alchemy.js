@@ -68,7 +68,7 @@ function verifySignature(body, signature) {
   return `sha256=${hash}` === signature;
 }
 
-// Check if this is a real swap (EXACTLY 1 IN and 1 OUT - for safety)
+// Check if this is a real swap (EXACTLY 1 UNIQUE token IN and 1 UNIQUE token OUT - for safety)
 function isRealSwap(allActivity) {
   const transfers = Array.isArray(allActivity) ? allActivity : [];
 
@@ -85,9 +85,20 @@ function isRealSwap(allActivity) {
     t => t.toAddress?.toLowerCase() === TARGET_WALLET.toLowerCase()
   );
 
-  // SAFETY: Chỉ chấp nhận ĐÚNG 1 IN và 1 OUT
+  // Deduplicate by token address (Alchemy có thể gửi duplicate)
+  const uniqueTokensOut = [...new Map(tokensOut.map(t => {
+    const addr = (t.rawContract?.address || t.tokenAddress || '').toLowerCase();
+    return [addr, t];
+  })).values()];
+
+  const uniqueTokensIn = [...new Map(tokensIn.map(t => {
+    const addr = (t.rawContract?.address || t.tokenAddress || '').toLowerCase();
+    return [addr, t];
+  })).values()];
+
+  // SAFETY: Chỉ chấp nhận ĐÚNG 1 UNIQUE token IN và 1 UNIQUE token OUT
   // Nhiều hơn có thể là attack/fake bundle
-  if (tokensOut.length !== 1 || tokensIn.length !== 1) {
+  if (uniqueTokensOut.length !== 1 || uniqueTokensIn.length !== 1) {
     return null;
   }
 
@@ -276,10 +287,14 @@ const webhookHandler = async (req, res) => {
       const tokensOut = tokenTransfers.filter(t => t.fromAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
       const tokensIn = tokenTransfers.filter(t => t.toAddress?.toLowerCase() === TARGET_WALLET.toLowerCase());
 
+      // Deduplicate for accurate count
+      const uniqueOut = [...new Set(tokensOut.map(t => (t.rawContract?.address || t.tokenAddress || '').toLowerCase()))];
+      const uniqueIn = [...new Set(tokensIn.map(t => (t.rawContract?.address || t.tokenAddress || '').toLowerCase()))];
+
       console.log(`\n❌ Not a swap`);
-      console.log(`   Token OUT: ${tokensOut.length} | Token IN: ${tokensIn.length}`);
-      if (tokensOut.length !== 1 || tokensIn.length !== 1) {
-        console.log(`   Reason: Must be exactly 1 IN and 1 OUT`);
+      console.log(`   Unique tokens - OUT: ${uniqueOut.length} | IN: ${uniqueIn.length}`);
+      if (uniqueOut.length !== 1 || uniqueIn.length !== 1) {
+        console.log(`   Reason: Must be exactly 1 unique token IN and 1 unique token OUT`);
       }
       console.log(`Target TX: https://basescan.org/tx/${txHash}`);
       return;
